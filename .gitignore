@@ -1,0 +1,5 @@
+.cproject
+.ipynb_checkpoints/
+.project
+Debug/
+*.pyc
