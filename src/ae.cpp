@@ -70,10 +70,10 @@ public:
 		d_prod_W2T_delta3 = 0;
 
 		//Initialize parameters
-//		init_parameters(d_W1, hidden_size, visible_size);
-//		init_parameters(d_W2, visible_size, hidden_size);
-		init_from_file("W1.txt", d_W1, hidden_size, visible_size);
-		init_from_file("W2.txt", d_W2, visible_size, hidden_size);
+		init_parameters(d_W1, hidden_size, visible_size);
+		init_parameters(d_W2, visible_size, hidden_size);
+//		init_from_file("W1.txt", d_W1, hidden_size, visible_size);
+//		init_from_file("W2.txt", d_W2, visible_size, hidden_size);
 		checkCudaErrors(cudaMemset(d_b1, 0, sizeof(float) * hidden_size * 1));
 		checkCudaErrors(cudaMemset(d_b2, 0, sizeof(float) * visible_size * 1));
 	}
@@ -425,6 +425,7 @@ void train()
 		for (int j = 0; j < IMAGE_W; j++)
 			fprintf(fout, "%f%c", result[i * IMAGE_W + j],
 					j == IMAGE_W - 1 ? '\n' : ' ');
+	fclose(fout);
 	delete[] result;
 }
 
