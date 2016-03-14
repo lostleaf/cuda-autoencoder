@@ -103,9 +103,6 @@ public:
 		allocate(&d_ones, 1, n_batch);
 		fill_ones(d_ones, n_batch);
 
-		//Data: X(v*n_batch)
-//		allocate(&d_X, visible_size, n_batch);
-
 //Forward: z2(h*n_batch) a2(h*n_batch) z3(v*n_batch) a3(v*n_batch)
 		allocate(&d_z2, hidden_size, n_batch);
 		allocate(&d_a2, hidden_size, n_batch);
@@ -254,18 +251,19 @@ public:
 		if (cost_)
 		{
 
-			float cost, tmp;
+			float tmp;
+			double cost;
 			checkCublasErrors(
-					cublasSnrm2(handle, visible_size * n_batch, d_err, 1, &cost));
-			cost = cost * cost / (2 * n_batch);
+					cublasSnrm2(handle, visible_size * n_batch, d_err, 1, &tmp));
+			cost = tmp * (double) tmp / (2 * n_batch);
 
 			checkCublasErrors(
 					cublasSnrm2(handle, hidden_size * visible_size, d_W1, 1, &tmp));
-			cost += tmp * tmp * lambda / 2;
+			cost += tmp * (double) tmp * lambda / 2;
 
 			checkCublasErrors(
 					cublasSnrm2(handle, visible_size * hidden_size, d_W2, 1, &tmp));
-			cost += tmp * tmp * lambda / 2;
+			cost += tmp * (double) tmp * lambda / 2;
 //			*cost_ = cost;
 
 			kl(d_rho_hat, d_kl_val, sparse_param, hidden_size * 1);
@@ -275,10 +273,19 @@ public:
 
 			checkCublasErrors(
 					cublasSasum(handle, hidden_size * 1, d_kl_val, 1, &tmp));
-			cost += tmp * beta;
+			cost += (double) tmp * beta;
 
-			*cost_ = cost;
+			*cost_ = (float) cost;
 		}
+	}
+
+	void reconstruct(float *d_X, float *h_result, int _n_batch)
+	{
+		set_n_batch(_n_batch);
+		forward(d_X);
+		checkCudaErrors(
+				cudaMemcpy(h_result, d_a3, _n_batch * IMAGE_W * IMAGE_H * sizeof(float),
+						cudaMemcpyDeviceToHost));
 	}
 private:
 	void read_mat_trans(const char *fname, float *A, int n_row, int n_col)
@@ -294,7 +301,9 @@ private:
 	{
 		float *h_A = new float[n_row * n_col];
 		read_mat_trans(fname, h_A, n_row, n_col);
-		checkCudaErrors(cudaMemcpy(d_A, h_A, n_row * n_col * sizeof(float), cudaMemcpyHostToDevice));
+		checkCudaErrors(
+				cudaMemcpy(d_A, h_A, n_row * n_col * sizeof(float),
+						cudaMemcpyHostToDevice));
 
 		delete[] h_A;
 	}
@@ -352,10 +361,7 @@ private:
 	//Helper: ones(1*n_batch)
 	float *d_ones;
 
-	//Data: X(v*n_batch)
-//	float *d_X;
-
-//Forward: z2(h*n_batch) a2(h*n_batch) z3(v*n_batch) a3(v*n_batch)
+	//Forward: z2(h*n_batch) a2(h*n_batch) z3(v*n_batch) a3(v*n_batch)
 	float *d_z2, *d_z3, *d_a2, *d_a3;
 
 	//Backward: delta2(h*n_batch) delta3(v*n_batch) err(v*n_batch)
@@ -364,7 +370,7 @@ private:
 	//Activation prime: of z2(h*n_batch) and z3(v*n_batch)
 	float *d_ap_z2, *d_ap_z3;
 
-	//Temporary variable: W2.T*delta3, size z2(h*n_batch)
+	//Temporary variable: W2.T*delta3, size same as z2(h*n_batch)
 	float *d_prod_W2T_delta3;
 
 	cublasHandle_t handle;
@@ -389,21 +395,37 @@ void read_data()
 void train()
 {
 	const int n_hidden = 196;
-	const int max_it = 1000;
+	const int max_it = 10000;
 	float rate = 0.5, lambda = 3e-3, rho = 0.1, beta = 3;
 	SparseAutoEncoder ae(IMAGE_H * IMAGE_H, n_hidden);
 	ae.set_n_batch(N_TRAIN);
+	timeval t1, t2;
+	gettimeofday(&t1, 0);
 	for (int i = 1; i <= max_it; i++)
 		if (i % 100 == 0)
 		{
+			gettimeofday(&t2, 0);
 			float cost;
 			ae.gradient_descent(rate, lambda, rho, beta, d_X, N_TRAIN, &cost);
-			rate *= 0.95;
-			printf("Epoch %d, cost %f\n", i, cost);
+			//rate *= 0.95;
+			printf(
+					"Epoch %d, cost %f, time elapsed in ms %ld, learning rate %f\n",
+					i, cost,
+					(t2.tv_sec - t1.tv_sec) * 1000000 + t2.tv_usec - t1.tv_usec,
+					rate);
+			gettimeofday(&t1, 0);
 		}
 		else
 			ae.gradient_descent(rate, lambda, rho, beta, d_X, N_TRAIN, NULL);
-
+	float *result = new float[IMAGE_W * IMAGE_H];
+	//reconstruct image[0]
+	ae.reconstruct(d_X + IMAGE_W * IMAGE_H, result, 1);
+	FILE *fout = fopen("result.txt", "w");
+	for (int i = 0; i < IMAGE_H; i++)
+		for (int j = 0; j < IMAGE_W; j++)
+			fprintf(fout, "%f%c", result[i * IMAGE_W + j],
+					j == IMAGE_W - 1 ? '\n' : ' ');
+	delete[] result;
 }
 
 int main()

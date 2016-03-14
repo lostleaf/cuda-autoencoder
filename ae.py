@@ -39,10 +39,6 @@ class AutoEncoder:
 
         self.b1 = np.zeros((hidden_size, 1), dtype=np.float64)
         self.b2 = np.zeros((visible_size, 1), dtype=np.float64)
-        np.savetxt("W1.txt", self.W1)
-        np.savetxt("W2.txt", self.W2)
-        np.savetxt("b1.txt", self.b1)
-        np.savetxt("b2.txt", self.b2)
 
     def sparse_autoencoder_cost(self, lambda_, rho, beta, data):
         # Number of training examples
@@ -68,7 +64,7 @@ class AutoEncoder:
 
         delta3 = -(data - a3) * sigmoid_prime(z3)
         delta2 = (np.dot(self.W2.T, delta3) + beta * delta_sparse) * sigmoid_prime(z2)
-        print delta2
+        # print delta2
         grad_W1 = np.dot(delta2, data.T) / m + lambda_ * self.W1
         grad_W2 = np.dot(delta3, a2.T) / m + lambda_ * self.W2
         grad_b1 = np.sum(delta2, axis=1, keepdims=True) / m
@@ -97,7 +93,7 @@ def main():
     ae = AutoEncoder(visible_size, hidden_size)
 
     rate = 0.5
-    MAX_IT = 1
+    MAX_IT = 100000
     t1 = time.time()
     for i in xrange(MAX_IT):
         cost, grad_W1, grad_b1, grad_W2, grad_b2 = ae.sparse_autoencoder_cost(lambda_, sparsity_param, beta, patches)
@@ -105,13 +101,13 @@ def main():
         ae.W2 -= rate * grad_W2
         ae.b1 -= rate * grad_b1
         ae.b2 -= rate * grad_b2
-        if (i) % 100 == 0:
+        if (i + 1) % 100 == 0:
             t2 = time.time()
             rate *= 0.95
-            print i + 1, cost, (t2 - t1) * 1000000
+            print "Epoch %d, cost function %f, time elapsed %f" % (i + 1, cost, (t2 - t1) * 1000000)
             t1 = time.time()
-    # with open("ae.pkl", "wb") as fout:
-    #     cPickle.dump(ae, fout, 2)
+    with open("ae.pkl", "wb") as fout:
+        cPickle.dump(ae, fout, 2)
 
 if __name__ == "__main__":
     main()
